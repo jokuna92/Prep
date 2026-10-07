@@ -107,6 +107,16 @@ canvas{position:absolute;display:block;touch-action:none}
 
   var sx = 1, dirty = true;
 
+  // Diagnostika: po otevření stránky s příponou ?debug v adrese se vlevo nahoře ukáže stav vykreslování a senzoru
+  var DEBUG = typeof location !== 'undefined' && /[?&]debug/.test(location.search);
+  var st = { frames: 0, ev: 0, drawSum: 0, drawN: 0, drawMax: 0, gapMax: 0, gapWorst: 0, stepMax: 0, stepWorst: 0, prev: null, t0: 0 };
+  var dbg = null;
+  if (DEBUG) {
+    dbg = document.createElement('pre');
+    dbg.style.cssText = 'position:fixed;left:8px;top:calc(env(safe-area-inset-top,0px) + 8px);margin:0;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.7);color:#fff;font:11px/1.35 ui-monospace,Menlo,monospace;z-index:20;pointer-events:none;white-space:pre';
+    document.body.appendChild(dbg);
+  }
+
   function resize() {
     var sw = stage.clientWidth, sh = stage.clientHeight;
     var scale = Math.min(sw / PW, sh / PH);
@@ -130,15 +140,21 @@ canvas{position:absolute;display:block;touch-action:none}
 
     for (var i = 0; i < tiles.length; i++) {
       var t = tiles[i];
+      var gx = t.cx + t.ox * t.w, gy = t.cy + t.oy * t.h;
+      // Gradient se kreslí přímo přes plochu dlaždice v souřadnicích posunutých do jeho středu.
+      // Bez ořezu a bez obrovského obdélníku je vykreslení výrazně lehčí.
       ctx.save();
-      ctx.beginPath();
-      if (t.type === 'ellipse') ctx.ellipse(t.cx, t.cy, t.w / 2, t.h / 2, 0, 0, Math.PI * 2);
-      else ctx.rect(t.x, t.y, t.w, t.h);
-      ctx.clip();
-      ctx.translate(t.cx + t.ox * t.w, t.cy + t.oy * t.h);
+      ctx.translate(gx, gy);
       ctx.scale(1, t.k);
       ctx.fillStyle = t.g.gr;
-      ctx.fillRect(-3000, -3000, 6000, 6000);
+      var lx = t.x - gx, ly = (t.y - gy) / t.k;
+      if (t.type === 'ellipse') {
+        ctx.beginPath();
+        ctx.ellipse(lx + t.w / 2, ly + t.h / (2 * t.k), t.w / 2, t.h / (2 * t.k), 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(lx, ly, t.w, t.h / t.k);
+      }
       ctx.restore();
     }
   }
@@ -184,6 +200,7 @@ canvas{position:absolute;display:block;touch-action:none}
   var hintTimer = null;
   function onOrient(e) {
     if (e.beta == null || e.gamma == null) return;
+    st.ev++;
     if (!gotEvent) { gotEvent = true; say('Pohyb telefonu je zapnutý', false); }
     var now = performance.now();
     if (touching && now - touchT < 3000) return;
@@ -260,8 +277,10 @@ canvas{position:absolute;display:block;touch-action:none}
   var last = performance.now();
 
   function frame(now) {
-    var dt = Math.min((now - last) / 1000, 0.1);
+    var gapMs = now - last;
+    var dt = Math.min(gapMs / 1000, 0.1);
     last = now;
+    if (DEBUG) { st.frames++; if (gapMs > st.gapMax) st.gapMax = gapMs; if (gapMs > st.gapWorst) st.gapWorst = gapMs; }
 
     while (hist.length > 1 && hist[1].t < now - 2500) hist.shift();
 
@@ -307,7 +326,35 @@ canvas{position:absolute;display:block;touch-action:none}
       }
     }
 
-    if (dirty) { dirty = false; draw(); }
+    if (dirty) {
+      dirty = false;
+      var d0 = performance.now();
+      draw();
+      if (DEBUG) {
+        var dm = performance.now() - d0;
+        st.drawSum += dm; st.drawN++; if (dm > st.drawMax) st.drawMax = dm;
+      }
+    }
+    if (DEBUG) {
+      var c1 = tiles[1];
+      var cp = [c1.cx + c1.ox * c1.w, c1.cy + c1.oy * c1.h];
+      if (st.prev) {
+        var stp = Math.hypot(cp[0] - st.prev[0], cp[1] - st.prev[1]);
+        if (stp > st.stepMax) st.stepMax = stp;
+        if (stp > st.stepWorst) st.stepWorst = stp;
+      }
+      st.prev = cp;
+      if (now - st.t0 >= 1000) {
+        var secs = (now - st.t0) / 1000;
+        var last1 = hist[hist.length - 1];
+        dbg.textContent =
+          'fps ' + Math.round(st.frames / secs) + '   mezera max ' + Math.round(st.gapMax) + ' ms (od otevreni ' + Math.round(st.gapWorst) + ')\n' +
+          'kresleni prum ' + (st.drawN ? (st.drawSum / st.drawN).toFixed(1) : '0') + ' ms, max ' + st.drawMax.toFixed(1) + ' ms\n' +
+          'senzor ' + Math.round(st.ev / secs) + ' udalosti/s   rezim ' + (last1.m ? 'naklon' : (last1.a ? 'dotek' : 'klid')) + '\n' +
+          'skok jadra max ' + st.stepMax.toFixed(1) + ' px/snimek (od otevreni ' + st.stepWorst.toFixed(1) + ')';
+        st.frames = 0; st.ev = 0; st.drawSum = 0; st.drawN = 0; st.drawMax = 0; st.gapMax = 0; st.stepMax = 0; st.t0 = now;
+      }
+    }
     requestAnimationFrame(frame);
   }
 
