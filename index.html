@@ -1,8 +1,6 @@
 <!doctype html>
-<html lang="cs">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<html lang="cs"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#c9a995">
 <title>Vizuální styl Mobil</title>
 <style>
@@ -17,8 +15,9 @@ canvas{position:absolute;display:block;touch-action:none}
 /* Nápověda se zobrazí jen na iPhonu, kde je pro snímání náklonu potřeba klepnutí a povolení */
 #hint{position:fixed;z-index:10;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 16px);max-width:calc(100% - 32px);padding:10px 16px;border:0;border-radius:18px;background:var(--hint-bg);color:var(--hint-fg);font:500 14px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center;touch-action:manipulation;cursor:pointer}
 </style>
-</head>
-<body>
+</head><body>
+
+
 <div id="stage"><canvas id="c"></canvas></div>
 <button id="hint" type="button" hidden>Klepnutím zapnete pohyb telefonu</button>
 
@@ -145,21 +144,16 @@ canvas{position:absolute;display:block;touch-action:none}
 
     for (var i = 0; i < tiles.length; i++) {
       var t = tiles[i];
-      var gx = t.cx + t.ox * t.w, gy = t.cy + t.oy * t.h;
-      // Gradient se kreslí přímo přes plochu dlaždice v souřadnicích posunutých do jeho středu.
-      // Bez ořezu a bez obrovského obdélníku je vykreslení výrazně lehčí.
+      // Osvědčené kreslení: ořez na tvar dlaždice a gradient posunutý do aktuální polohy jádra
       ctx.save();
-      ctx.translate(gx, gy);
+      ctx.beginPath();
+      if (t.type === 'ellipse') ctx.ellipse(t.cx, t.cy, t.w / 2, t.h / 2, 0, 0, Math.PI * 2);
+      else ctx.rect(t.x, t.y, t.w, t.h);
+      ctx.clip();
+      ctx.translate(t.cx + t.ox * t.w, t.cy + t.oy * t.h);
       ctx.scale(1, t.k);
       ctx.fillStyle = t.g.gr;
-      var lx = t.x - gx, ly = (t.y - gy) / t.k;
-      if (t.type === 'ellipse') {
-        ctx.beginPath();
-        ctx.ellipse(lx + t.w / 2, ly + t.h / (2 * t.k), t.w / 2, t.h / (2 * t.k), 0, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.fillRect(lx, ly, t.w, t.h / t.k);
-      }
+      ctx.fillRect(-3000, -3000, 6000, 6000);
       ctx.restore();
     }
   }
@@ -369,5 +363,4 @@ canvas{position:absolute;display:block;touch-action:none}
   requestAnimationFrame(frame);
 })();
 </script>
-</body>
-</html>
+</body></html>
