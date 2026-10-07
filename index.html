@@ -194,7 +194,7 @@ canvas{position:absolute;display:block;touch-action:none}
 
   // Náklon telefonu (deviceorientation). Funguje na zabezpečené adrese (HTTPS) a při držení telefonu na výšku.
   var CENTER = { x: W / 2, y: H / 2 };
-  var tilt = { on: false, gx0: null, gy0: 0, sx: 0, sy: 0, t: 0 };
+  var tilt = { on: false, gx0: null, a0: 0, sx: 0, sy: 0, sz: 0, t: 0 };
   var gotEvent = false;  // přišla alespoň jedna skutečná hodnota náklonu
   var hintTimer = null;
   function onOrient(e) {
@@ -206,19 +206,27 @@ canvas{position:absolute;display:block;touch-action:none}
     // Směr zemské přitažlivosti v rovině displeje (X doprava, Y dolů). Je spojitý při jakémkoli natočení
     // telefonu, takže funguje i při otáčení dokola o 360 stupňů, kde úhly beta a gamma samy skáčou.
     var br = e.beta * Math.PI / 180, gr = e.gamma * Math.PI / 180;
-    var gX = Math.cos(br) * Math.sin(gr), gY = Math.sin(br);
-    if (tilt.gx0 === null) { tilt.gx0 = gX; tilt.gy0 = gY; tilt.sx = gX; tilt.sy = gY; tilt.t = now; }
+    var gX = Math.cos(br) * Math.sin(gr), gY = Math.sin(br), gZ = Math.cos(br) * Math.cos(gr);
+    if (tilt.gx0 === null) { tilt.gx0 = gX; tilt.a0 = Math.atan2(gZ, gY); tilt.sx = gX; tilt.sy = gY; tilt.sz = gZ; tilt.t = now; }
     var dt = Math.min((now - tilt.t) / 1000, 0.2);
     tilt.t = now;
     // Vyhlazení signálu ze senzoru: drobné nepřesnosti a chvění ruky se tak nepřenesou do pohybu
     var ks = 1 - Math.exp(-dt / TILT_SMOOTH);
     tilt.sx += (gX - tilt.sx) * ks;
     tilt.sy += (gY - tilt.sy) * ks;
-    var dX = tilt.sx - tilt.gx0, dY = tilt.sy - tilt.gy0;
-    // Výchozí poloha se pomalu přizpůsobuje tomu, jak telefon držíte, takže pozvolné změny držení se vyrovnají
+    tilt.sz += (gZ - tilt.sz) * ks;
+    // Náklon doleva a doprava: složka tíhy v rovině displeje. Náklon dopředu a dozadu: úhel mezi složkami Y a Z,
+    // protože u telefonu drženého na výšku se složka Y při předklonu téměř nemění (sinus u 90 stupňů je plochý).
+    var rr = Math.hypot(tilt.sy, tilt.sz);
+    var ang = Math.atan2(tilt.sz, tilt.sy);
+    var da = ang - tilt.a0;
+    while (da > Math.PI) da -= 2 * Math.PI;
+    while (da < -Math.PI) da += 2 * Math.PI;
+    var dX = tilt.sx - tilt.gx0, dY = -da * rr;
+    // Výchozí poloha se pomalu přizpůsobuje tomu, jak telefon držíte
     var kb = 1 - Math.exp(-dt / TILT_ADAPT);
     tilt.gx0 += dX * kb;
-    tilt.gy0 += dY * kb;
+    tilt.a0 += da * kb;
     var len = Math.hypot(dX, dY);
     // Měkká křivka bez ostrého nárůstu u nuly (tanh), takže malé náklony nepůsobí škubavě
     var mag = Math.tanh(Math.max(0, len - TILT_DEAD) / TILT_SPAN);
