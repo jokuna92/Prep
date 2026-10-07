@@ -15,12 +15,12 @@ body{background:var(--bg);-webkit-tap-highlight-color:transparent;-webkit-user-s
 #stage{position:relative;width:100%;height:100%;touch-action:none}
 canvas{position:absolute;display:block;touch-action:none}
 /* Nápověda se zobrazí jen na iPhonu, kde je pro snímání náklonu potřeba klepnutí a povolení */
-#hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 16px);padding:8px 14px;border-radius:999px;background:var(--hint-bg);color:var(--hint-fg);font:500 13px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;pointer-events:none;white-space:nowrap}
+#hint{position:fixed;z-index:10;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 16px);max-width:calc(100% - 32px);padding:10px 16px;border:0;border-radius:18px;background:var(--hint-bg);color:var(--hint-fg);font:500 14px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center;touch-action:manipulation;cursor:pointer}
 </style>
 </head>
 <body>
 <div id="stage"><canvas id="c"></canvas></div>
-<div id="hint" hidden>Klepnutím zapnete pohyb telefonu</div>
+<button id="hint" type="button" hidden>Klepnutím zapnete pohyb telefonu</button>
 
 <script>
 (function () {
@@ -151,7 +151,9 @@ canvas{position:absolute;display:block;touch-action:none}
     return { x: py, y: H - px };
   }
   var touching = false; // dokud je prst na displeji, má dotek přednost před náklonem
+  var touchT = 0;
   function pushPos(e) {
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') touchT = performance.now();
     if (e.type === 'pointerdown' && (e.pointerType === 'touch' || e.pointerType === 'pen')) touching = true;
     var p = toDesign(e);
     lastPos = p;
@@ -174,12 +176,16 @@ canvas{position:absolute;display:block;touch-action:none}
   // Náklon telefonu (deviceorientation). Funguje na zabezpečené adrese (HTTPS) a při držení telefonu na výšku.
   var CENTER = { x: W / 2, y: H / 2 };
   var tilt = { on: false, b0: null, g0: 0, t: 0 };
+  var gotEvent = false;  // přišla alespoň jedna skutečná hodnota náklonu
+  var hintTimer = null;
   function wrap180(a) { return ((a + 540) % 360) - 180; }
   function clamp1(v) { return Math.max(-1, Math.min(1, v)); }
 
   function onOrient(e) {
-    if (touching || e.beta == null || e.gamma == null) return;
+    if (e.beta == null || e.gamma == null) return;
+    if (!gotEvent) { gotEvent = true; say('Pohyb telefonu je zapnutý', false); }
     var now = performance.now();
+    if (touching && now - touchT < 3000) return;
     if (tilt.b0 === null) { tilt.b0 = e.beta; tilt.g0 = e.gamma; tilt.t = now; }
     var db = wrap180(e.beta - tilt.b0), dg = e.gamma - tilt.g0;
     // Výchozí poloha se pomalu přizpůsobuje tomu, jak telefon držíte, takže pozvolné změny držení se vyrovnají
@@ -192,27 +198,43 @@ canvas{position:absolute;display:block;touch-action:none}
     hist.push({ t: now, a: true, m: true, ux: ry, uy: -rx, mag: Math.min(1, Math.hypot(rx, ry)) });
   }
 
+  // Štítek dole ukazuje stav: výzvu k povolení, chybu, nebo na chvíli potvrzení, že pohyb běží
   var hint = document.getElementById('hint');
   var DOE = window.DeviceOrientationEvent;
+  function say(text, keep) {
+    clearTimeout(hintTimer);
+    hint.textContent = text;
+    hint.hidden = false;
+    if (!keep) hintTimer = setTimeout(function () { hint.hidden = true; }, 2200);
+  }
   function attachTilt() {
     if (tilt.on) return;
     tilt.on = true;
     window.addEventListener('deviceorientation', onOrient);
+    // Pokud do dvou sekund nepřijde žádná hodnota, telefon nebo prohlížeč náklon neposílá
+    setTimeout(function () {
+      if (!gotEvent) say('Telefon neposílá data o náklonu. Stránka musí běžet přes https a v prohlížeči nesmí být zakázaný přístup k pohybu.', true);
+    }, 2000);
     hint.hidden = true;
   }
-  if (!reduceMotion && DOE) {
+  function askPermission() {
+    DOE.requestPermission().then(function (res) {
+      if (res === 'granted') attachTilt();
+      else say('Povolení bylo zamítnuto. Zavřete Safari, stránku otevřete znovu a klepněte na tento štítek.', true);
+    }).catch(function (err) {
+      say('Povolení se nepodařilo vyžádat (' + (err && err.name ? err.name : 'chyba') + '). Klepněte znovu.', true);
+    });
+  }
+  if (DOE) {
     if (typeof DOE.requestPermission === 'function') {
-      // iPhone: povolení se musí vyžádat po klepnutí
-      hint.hidden = false;
-      window.addEventListener('click', function ask() {
-        window.removeEventListener('click', ask);
-        DOE.requestPermission().then(function (res) {
-          if (res === 'granted') attachTilt(); else hint.hidden = true;
-        }).catch(function () { hint.hidden = true; });
-      });
-    } else {
+      // iPhone: povolení se musí vyžádat klepnutím na tlačítko
+      say('Klepnutím zapnete pohyb telefonu', true);
+      hint.addEventListener('click', askPermission);
+    } else if (!reduceMotion) {
       attachTilt();
     }
+  } else {
+    say('Tento prohlížeč nepodporuje náklon telefonu.', false);
   }
 
   function mouseAt(time) {
