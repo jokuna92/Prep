@@ -37,8 +37,12 @@ canvas{position:absolute;display:block;touch-action:none}
   var RATE_NEAR = 3.2;   // tuhost u dlaždic blízko doteku (1/s)
   var RATE_FAR = 1.3;    // tuhost u nejvzdálenějších dlaždic (1/s)
   var RATE_REST = 1.8;   // tuhost při návratu do výchozí polohy
-  var TILT_RANGE = 22;   // náklon ve stupních, při kterém je výchylka jádra plná
-  var TILT_ADAPT = 10;   // sekundy, za které se výchozí poloha telefonu přizpůsobí tomu, jak ho držíte
+  var TILT_SPAN = 1.0;     // změna polohy telefonu, při které výchylka dosáhne zhruba tří čtvrtin maxima (větší číslo = méně citlivé a delší škála)
+  var TILT_SMOOTH = 0.25;  // sekundy, vyhlazení signálu ze senzoru, aby pohyb neškubal (větší číslo = klidnější)
+  var TILT_DEAD = 0.015;   // drobné chvění ruky pod touto hodnotou se ignoruje
+  var RATE_TILT_NEAR = 2.2; // tuhost pohybu při náklonu, blízké dlaždice (menší číslo = pomalejší)
+  var RATE_TILT_FAR = 1.0;  // tuhost pohybu při náklonu, vzdálené dlaždice
+  var TILT_ADAPT = 25;   // sekundy, za které se výchozí poloha telefonu přizpůsobí tomu, jak ho držíte
   var TILT_DIR = 1;      // 1 = jádro se kutálí ve směru, kam telefon klopíte, -1 = opačně
   var SATURATE = 0.5;    // vzdálenost doteku (v rozměrech dlaždice), od které je výchylka plná
   // Maximální výchylka barevného jádra od středu dlaždice (v rozměrech dlaždice). Větší hodnota, výraznější natáčení.
@@ -175,27 +179,36 @@ canvas{position:absolute;display:block;touch-action:none}
 
   // Náklon telefonu (deviceorientation). Funguje na zabezpečené adrese (HTTPS) a při držení telefonu na výšku.
   var CENTER = { x: W / 2, y: H / 2 };
-  var tilt = { on: false, b0: null, g0: 0, t: 0 };
+  var tilt = { on: false, gx0: null, gy0: 0, sx: 0, sy: 0, t: 0 };
   var gotEvent = false;  // přišla alespoň jedna skutečná hodnota náklonu
   var hintTimer = null;
-  function wrap180(a) { return ((a + 540) % 360) - 180; }
-  function clamp1(v) { return Math.max(-1, Math.min(1, v)); }
-
   function onOrient(e) {
     if (e.beta == null || e.gamma == null) return;
     if (!gotEvent) { gotEvent = true; say('Pohyb telefonu je zapnutý', false); }
     var now = performance.now();
     if (touching && now - touchT < 3000) return;
-    if (tilt.b0 === null) { tilt.b0 = e.beta; tilt.g0 = e.gamma; tilt.t = now; }
-    var db = wrap180(e.beta - tilt.b0), dg = e.gamma - tilt.g0;
-    // Výchozí poloha se pomalu přizpůsobuje tomu, jak telefon držíte, takže pozvolné změny držení se vyrovnají
-    var k = 1 - Math.exp(-((now - tilt.t) / 1000) / TILT_ADAPT);
+    // Směr zemské přitažlivosti v rovině displeje (X doprava, Y dolů). Je spojitý při jakémkoli natočení
+    // telefonu, takže funguje i při otáčení dokola o 360 stupňů, kde úhly beta a gamma samy skáčou.
+    var br = e.beta * Math.PI / 180, gr = e.gamma * Math.PI / 180;
+    var gX = Math.cos(br) * Math.sin(gr), gY = Math.sin(br);
+    if (tilt.gx0 === null) { tilt.gx0 = gX; tilt.gy0 = gY; tilt.sx = gX; tilt.sy = gY; tilt.t = now; }
+    var dt = Math.min((now - tilt.t) / 1000, 0.2);
     tilt.t = now;
-    tilt.b0 = wrap180(tilt.b0 + db * k);
-    tilt.g0 += dg * k;
-    // Na výšku: dg doprava, db dolů. Do návrhového prostoru na šířku se směr (X, Y) převádí na (Y, -X).
-    var rx = clamp1(TILT_DIR * dg / TILT_RANGE), ry = clamp1(TILT_DIR * db / TILT_RANGE);
-    hist.push({ t: now, a: true, m: true, ux: ry, uy: -rx, mag: Math.min(1, Math.hypot(rx, ry)) });
+    // Vyhlazení signálu ze senzoru: drobné nepřesnosti a chvění ruky se tak nepřenesou do pohybu
+    var ks = 1 - Math.exp(-dt / TILT_SMOOTH);
+    tilt.sx += (gX - tilt.sx) * ks;
+    tilt.sy += (gY - tilt.sy) * ks;
+    var dX = tilt.sx - tilt.gx0, dY = tilt.sy - tilt.gy0;
+    // Výchozí poloha se pomalu přizpůsobuje tomu, jak telefon držíte, takže pozvolné změny držení se vyrovnají
+    var kb = 1 - Math.exp(-dt / TILT_ADAPT);
+    tilt.gx0 += dX * kb;
+    tilt.gy0 += dY * kb;
+    var len = Math.hypot(dX, dY);
+    // Měkká křivka bez ostrého nárůstu u nuly (tanh), takže malé náklony nepůsobí škubavě
+    var mag = Math.tanh(Math.max(0, len - TILT_DEAD) / TILT_SPAN);
+    var nx = len > 1e-6 ? TILT_DIR * dX / len : 0, ny = len > 1e-6 ? TILT_DIR * dY / len : 0;
+    // Do návrhového prostoru na šířku se směr (X, Y) převádí na (Y, -X).
+    hist.push({ t: now, a: true, m: true, ux: ny, uy: -nx, mag: mag });
   }
 
   // Štítek dole ukazuje stav: výzvu k povolení, chybu, nebo na chvíli potvrzení, že pohyb běží
@@ -269,7 +282,7 @@ canvas{position:absolute;display:block;touch-action:none}
           tx = t.rx * (1 - s.mag) + ux / ul * t.reach * s.mag;
           ty = t.ry * (1 - s.mag) + uy / ul * t.reach * s.mag;
         }
-        rate = RATE_NEAR + (RATE_FAR - RATE_NEAR) * f;
+        rate = RATE_TILT_NEAR + (RATE_TILT_FAR - RATE_TILT_NEAR) * f;
       } else if (s.a) {
         var vx = (s.x - t.cx) / t.w, vy = (s.y - t.cy) / t.h;
         var len = Math.hypot(vx, vy);
