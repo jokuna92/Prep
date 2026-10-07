@@ -111,6 +111,11 @@ canvas{position:absolute;display:block;touch-action:none}
   var DEBUG = typeof location !== 'undefined' && /[?&]debug/.test(location.search);
   var st = { frames: 0, ev: 0, drawSum: 0, drawN: 0, drawMax: 0, gapMax: 0, gapWorst: 0, stepMax: 0, stepWorst: 0, prev: null, t0: 0 };
   var dbg = null;
+  function scrAngle() {
+    var o = window.screen && window.screen.orientation;
+    if (o && typeof o.angle === 'number') return o.angle;
+    return typeof window.orientation === 'number' ? window.orientation : 'n/a';
+  }
   if (DEBUG) {
     dbg = document.createElement('pre');
     dbg.style.cssText = 'position:fixed;left:8px;top:calc(env(safe-area-inset-top,0px) + 8px);margin:0;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.7);color:#fff;font:11px/1.35 ui-monospace,Menlo,monospace;z-index:20;pointer-events:none;white-space:pre';
@@ -200,7 +205,7 @@ canvas{position:absolute;display:block;touch-action:none}
   var hintTimer = null;
   function onOrient(e) {
     if (e.beta == null || e.gamma == null) return;
-    st.ev++;
+    st.ev++; st.beta = e.beta; st.gamma = e.gamma;
     if (!gotEvent) { gotEvent = true; say('Pohyb telefonu je zapnutý', false); }
     var now = performance.now();
     if (touching && now - touchT < 3000) return;
@@ -351,7 +356,9 @@ canvas{position:absolute;display:block;touch-action:none}
           'fps ' + Math.round(st.frames / secs) + '   mezera max ' + Math.round(st.gapMax) + ' ms (od otevreni ' + Math.round(st.gapWorst) + ')\n' +
           'kresleni prum ' + (st.drawN ? (st.drawSum / st.drawN).toFixed(1) : '0') + ' ms, max ' + st.drawMax.toFixed(1) + ' ms\n' +
           'senzor ' + Math.round(st.ev / secs) + ' udalosti/s   rezim ' + (last1.m ? 'naklon' : (last1.a ? 'dotek' : 'klid')) + '\n' +
-          'skok jadra max ' + st.stepMax.toFixed(1) + ' px/snimek (od otevreni ' + st.stepWorst.toFixed(1) + ')';
+          'skok jadra max ' + st.stepMax.toFixed(1) + ' px/snimek (od otevreni ' + st.stepWorst.toFixed(1) + ')\n' +
+          'beta ' + (st.beta == null ? '-' : st.beta.toFixed(0)) + '  gamma ' + (st.gamma == null ? '-' : st.gamma.toFixed(0)) +
+          '  uhel obrazovky ' + scrAngle() + '  okno ' + window.innerWidth + 'x' + window.innerHeight;
         st.frames = 0; st.ev = 0; st.drawSum = 0; st.drawN = 0; st.drawMax = 0; st.gapMax = 0; st.stepMax = 0; st.t0 = now;
       }
     }
