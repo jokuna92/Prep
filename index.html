@@ -36,12 +36,12 @@ canvas{position:absolute;display:block;touch-action:none}
   var RATE_NEAR = 3.2;   // tuhost u dlaždic blízko doteku (1/s)
   var RATE_FAR = 1.3;    // tuhost u nejvzdálenějších dlaždic (1/s)
   var RATE_REST = 1.8;   // tuhost při návratu do výchozí polohy
-  var TILT_SPAN = 1.0;     // změna polohy telefonu, při které výchylka dosáhne zhruba tří čtvrtin maxima (větší číslo = méně citlivé a delší škála)
-  var TILT_SMOOTH = 0.25;  // sekundy, vyhlazení signálu ze senzoru, aby pohyb neškubal (větší číslo = klidnější)
-  var TILT_DEAD = 0.015;   // drobné chvění ruky pod touto hodnotou se ignoruje
-  var RATE_TILT_NEAR = 2.2; // tuhost pohybu při náklonu, blízké dlaždice (menší číslo = pomalejší)
-  var RATE_TILT_FAR = 1.0;  // tuhost pohybu při náklonu, vzdálené dlaždice
-  var TILT_ADAPT = 25;   // sekundy, za které se výchozí poloha telefonu přizpůsobí tomu, jak ho držíte
+  var TILT_SPAN = 0.30;     // změna polohy telefonu, při které výchylka dosáhne zhruba tří čtvrtin maxima (větší číslo = méně citlivé a delší škála)
+  var TILT_SMOOTH = 0.10;  // sekundy, vyhlazení signálu ze senzoru, aby pohyb neškubal (větší číslo = klidnější)
+  var TILT_DEAD = 0.02;   // drobné chvění ruky pod touto hodnotou se ignoruje
+  var RATE_TILT_NEAR = 5.0; // tuhost pohybu při náklonu, blízké dlaždice (menší číslo = pomalejší)
+  var RATE_TILT_FAR = 2.2;  // tuhost pohybu při náklonu, vzdálené dlaždice
+  var TILT_ADAPT = 90;   // sekundy, za které se výchozí poloha telefonu přizpůsobí tomu, jak ho držíte
   var TILT_DIR = 1;      // 1 = jádro se kutálí ve směru, kam telefon klopíte, -1 = opačně
   var SATURATE = 0.5;    // vzdálenost doteku (v rozměrech dlaždice), od které je výchylka plná
   // Maximální výchylka barevného jádra od středu dlaždice (v rozměrech dlaždice). Větší hodnota, výraznější natáčení.
